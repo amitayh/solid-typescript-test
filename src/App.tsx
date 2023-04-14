@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Switch, Match } from "solid-js";
 import {
   DateValue,
   filter,
@@ -12,23 +12,41 @@ import "./App.css";
 function FilterGroup({
   filters,
   operator,
+  onGroupOperatorChange,
 }: {
   filters: Filter[];
   operator: "And" | "Or";
+  onGroupOperatorChange?: (o: string) => void;
 }) {
   return (
-    <ul>
-      <For each={filters}>
-        {(filter, i) => (
-          <li>
-            <Show when={i() > 0} fallback="Where">
-              {operator}
-            </Show>{" "}
-            <FilterWidget filter={filter} />
-          </li>
-        )}
-      </For>
-    </ul>
+    <>
+      <ul>
+        <For each={filters}>
+          {(filter, i) => (
+            <li>
+              <Switch fallback={operator}>
+                <Match when={i() == 0}>Where</Match>
+                <Match when={i() == 1}>
+                  <select
+                    onChange={(e) =>
+                      onGroupOperatorChange &&
+                      onGroupOperatorChange(e.currentTarget.value)
+                    }
+                  >
+                    <option value="And">And</option>
+                    <option value="Or">Or</option>
+                  </select>
+                </Match>
+              </Switch>{" "}
+              <FilterWidget filter={filter} />
+            </li>
+          )}
+        </For>
+        <li>
+          <button>Add filter</button> | <button>Add filter group</button>
+        </li>
+      </ul>
+    </>
   );
 }
 
