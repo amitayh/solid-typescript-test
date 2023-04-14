@@ -1,4 +1,4 @@
-import { createSignal, For, Switch, Match } from "solid-js";
+import { createSignal, For, Switch, Match, Accessor } from "solid-js";
 import {
   DateValue,
   filter,
@@ -9,15 +9,34 @@ import {
 import type { Filter, Field } from "./filter";
 import "./App.css";
 
+type FilterGroupOperator = "and" | "or";
+
+function Option(props: { value: string; selected: string; label: string }) {
+  return (
+    <option value={props.value} selected={props.value == props.selected}>
+      {props.label}
+    </option>
+  );
+}
+
 function FilterGroup({
   filters,
   operator,
   onGroupOperatorChange,
 }: {
   filters: Filter[];
-  operator: "And" | "Or";
-  onGroupOperatorChange?: (o: string) => void;
+  operator: FilterGroupOperator;
+  onGroupOperatorChange?: (o: FilterGroupOperator) => void;
 }) {
+  const onGroupOperatorChangeHandler = (e: {
+    currentTarget: HTMLSelectElement;
+  }) => {
+    const value = e.currentTarget.value;
+    if (onGroupOperatorChange && (value == "and" || value == "or")) {
+      onGroupOperatorChange(value);
+    }
+  };
+
   return (
     <>
       <ul>
@@ -27,14 +46,9 @@ function FilterGroup({
               <Switch fallback={operator}>
                 <Match when={i() == 0}>Where</Match>
                 <Match when={i() == 1}>
-                  <select
-                    onChange={(e) =>
-                      onGroupOperatorChange &&
-                      onGroupOperatorChange(e.currentTarget.value)
-                    }
-                  >
-                    <option value="And">And</option>
-                    <option value="Or">Or</option>
+                  <select onChange={onGroupOperatorChangeHandler}>
+                    <Option value="and" selected={operator} label="And" />
+                    <Option value="or" selected={operator} label="Or" />
                   </select>
                 </Match>
               </Switch>{" "}
@@ -52,6 +66,10 @@ function FilterGroup({
 
 type Operators = { [K in Operator]?: string };
 
+function toOperator(str: string): Operator | undefined {
+  return Object.values(Operator).find((operator) => operator == str);
+}
+
 function OperatorSelector({
   operators,
   selected,
@@ -59,21 +77,16 @@ function OperatorSelector({
 }: {
   operators: Operators;
   selected: Operator;
-  onChange?: (operator: Operator) => void;
+  onChange?: (operator?: Operator) => void;
 }) {
   // const
   return (
     <select
-      onChange={(e) => onChange && onChange(parseInt(e.currentTarget.value))}
+      onChange={(e) => onChange && onChange(toOperator(e.currentTarget.value))}
     >
       <For each={Object.entries(operators)}>
-        {([operator, name]) => (
-          <option
-            value={operator}
-            selected={parseInt(operator, 10) == selected}
-          >
-            {name}
-          </option>
+        {([operator, label]) => (
+          <Option value={operator} selected={selected} label={label} />
         )}
       </For>
     </select>
@@ -201,12 +214,29 @@ function FieldWidget({ field }: { field: Field }) {
   }
 }
 
-function FilterWidget({ filter }: { filter: Filter }) {
+function FilterWidget({
+  filter2,
+  onChange,
+}: {
+  filter2: Accessor<Filter>;
+  onChange?: (f: Filter) => void;
+}) {
+  const filter = filter2();
   switch (filter.kind) {
     case "and":
-      return <FilterGroup filters={filter.filters} operator="And" />;
     case "or":
-      return <FilterGroup filters={filter.filters} operator="Or" />;
+      const onGroupOperatorChangeHandler = (operator: FilterGroupOperator) => {
+        if (onChange) {
+          onChange({ kind: operator, filters: filter.filters });
+        }
+      };
+      return (
+        <FilterGroup
+          filters={filter.filters}
+          operator={filter.kind}
+          onGroupOperatorChange={onGroupOperatorChangeHandler}
+        />
+      );
     case "field":
       return <FieldWidget field={filter} />;
   }
@@ -218,7 +248,10 @@ function App() {
   return (
     <div class="App">
       <h1>Vite + Solid!</h1>
-      <FilterWidget filter={getFilter()} />
+      <FilterWidget
+        filter2={getFilter}
+        onChange={(updated) => setFilter(updated)}
+      />
     </div>
   );
 }

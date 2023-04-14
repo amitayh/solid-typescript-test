@@ -1,16 +1,16 @@
 export enum Operator {
-  Equals,
-  NotEquals,
-  GreaterThan,
-  GreaterThanEquals,
-  LessThan,
-  LessThanEquals,
-  Between,
-  NotBetween,
-  Contains,
-  DoesNotContain,
-  In,
-  NotIn,
+  Equals = "eq",
+  NotEquals = "neq",
+  GreaterThan = "gt",
+  GreaterThanEquals = "gte",
+  LessThan = "lt",
+  LessThanEquals = "lte",
+  Between = "bet",
+  NotBetween = "nbet",
+  Contains = "con",
+  DoesNotContain = "ncon",
+  In = "in",
+  NotIn = "nin",
 }
 
 export type StringValue = {
