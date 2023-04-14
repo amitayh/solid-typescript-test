@@ -1,17 +1,28 @@
 import { createSignal, For, Show } from "solid-js";
-import solidLogo from "./assets/solid.svg";
-import { DateValue, filter, NumberValue, StringValue } from "./filter";
+import {
+  DateValue,
+  filter,
+  NumberValue,
+  Operator,
+  StringValue,
+} from "./filter";
 import type { Filter, Field } from "./filter";
 import "./App.css";
 
-function AndWidget({ filters }: { filters: Filter[] }) {
+function FilterGroup({
+  filters,
+  operator,
+}: {
+  filters: Filter[];
+  operator: "And" | "Or";
+}) {
   return (
     <ul>
       <For each={filters}>
         {(filter, i) => (
           <li>
             <Show when={i() > 0} fallback="Where">
-              And
+              {operator}
             </Show>{" "}
             <FilterWidget filter={filter} />
           </li>
@@ -21,48 +32,97 @@ function AndWidget({ filters }: { filters: Filter[] }) {
   );
 }
 
-function OrWidget({ filters }: { filters: Filter[] }) {
+type Operators = { [K in Operator]?: string };
+
+function OperatorSelector({
+  operators,
+  selected,
+  onChange,
+}: {
+  operators: Operators;
+  selected: Operator;
+  onChange?: (operator: Operator) => void;
+}) {
+  // const
   return (
-    <ul>
-      <For each={filters}>
-        {(filter, i) => (
-          <li>
-            <Show when={i() > 0} fallback="Where">
-              Or
-            </Show>{" "}
-            <FilterWidget filter={filter} />
-          </li>
+    <select
+      onChange={(e) => onChange && onChange(parseInt(e.currentTarget.value))}
+    >
+      <For each={Object.entries(operators)}>
+        {([operator, name]) => (
+          <option
+            value={operator}
+            selected={parseInt(operator, 10) == selected}
+          >
+            {name}
+          </option>
         )}
       </For>
-    </ul>
+    </select>
   );
 }
+
+const stringOperators = {
+  [Operator.Equals]: "=",
+  [Operator.NotEquals]: "≠",
+  [Operator.Contains]: "contains",
+  [Operator.DoesNotContain]: "doesn't contain",
+};
 
 function StringWidget({ value }: { value: StringValue }) {
   return (
     <>
-      <select>
-        <For each={["=", "≠", "contains", "does not contain"]}>
-          {(option) => <option>{option}</option>}
-        </For>
-      </select>
+      <OperatorSelector operators={stringOperators} selected={value.operator} />
       <input value={value.value} />
     </>
   );
 }
 
+const numberOperators = {
+  [Operator.Equals]: "=",
+  [Operator.NotEquals]: "≠",
+  [Operator.GreaterThan]: ">",
+  [Operator.GreaterThanEquals]: "≥",
+  [Operator.LessThan]: "<",
+  [Operator.LessThanEquals]: "≤",
+  [Operator.Between]: "between",
+  [Operator.NotBetween]: "not between",
+};
+
 function NumberWidget({ value }: { value: NumberValue }) {
   if ("value" in value) {
-    return <input type="number" value={value.value} />;
-  } else {
     return (
       <>
-        <input type="number" value={value.range[0]} />{" "}
-        <input type="number" value={value.range[1]} />
+        <OperatorSelector
+          operators={numberOperators}
+          selected={value.operator}
+        />
+        <input type="number" value={value.value} />;
+      </>
+    );
+  } else {
+    const [from, to] = value.range;
+    return (
+      <>
+        <OperatorSelector
+          operators={numberOperators}
+          selected={value.operator}
+        />
+        <input type="number" value={from} />
+        and
+        <input type="number" value={to} />
       </>
     );
   }
 }
+
+const dateOperators = {
+  [Operator.Equals]: "on",
+  [Operator.GreaterThan]: "after",
+  [Operator.LessThan]: "before",
+  [Operator.Between]: "between",
+  [Operator.NotBetween]: "not between",
+};
 
 function DateInput({ date }: { date: Date }) {
   const dateString = date.toISOString().substring(0, 10);
@@ -71,12 +131,18 @@ function DateInput({ date }: { date: Date }) {
 
 function DateWidget({ value }: { value: DateValue }) {
   if ("value" in value) {
-    return <DateInput date={value.value} />;
+    return (
+      <>
+        <OperatorSelector operators={dateOperators} selected={value.operator} />
+        <DateInput date={value.value} />
+      </>
+    );
   } else {
     const [from, to] = value.range;
     return (
       <>
-        <DateInput date={from} /> <DateInput date={to} />
+        <OperatorSelector operators={dateOperators} selected={value.operator} />
+        <DateInput date={from} /> and <DateInput date={to} />
       </>
     );
   }
@@ -120,9 +186,9 @@ function FieldWidget({ field }: { field: Field }) {
 function FilterWidget({ filter }: { filter: Filter }) {
   switch (filter.kind) {
     case "and":
-      return <AndWidget filters={filter.filters} />;
+      return <FilterGroup filters={filter.filters} operator="And" />;
     case "or":
-      return <OrWidget filters={filter.filters} />;
+      return <FilterGroup filters={filter.filters} operator="Or" />;
     case "field":
       return <FieldWidget field={filter} />;
   }
