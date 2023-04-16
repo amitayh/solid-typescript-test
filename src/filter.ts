@@ -60,30 +60,27 @@ export type Field =
   | ({ field: "country" } & StringListValue)
   | ({ field: "married" } & BooleanValue);
 
-export type FilterGroup = { kind: "and" | "or"; filters: Filter[] };
+export type FilterGroup = { operator: "and" | "or"; filters: Filter[] };
 
-export type Filter = FilterGroup | ({ kind: "field" } & Field);
+export type Filter = FilterGroup | Field;
 
 export const filter: Filter = {
-  kind: "and",
+  operator: "and",
   filters: [
     {
-      kind: "field",
       field: "name",
       operator: Operator.Contains,
       value: "John",
     },
     {
-      kind: "or",
+      operator: "or",
       filters: [
         {
-          kind: "field",
           field: "age",
           operator: Operator.Between,
           range: [25, 30],
         },
         {
-          kind: "field",
           field: "dob",
           operator: Operator.GreaterThan, // after
           value: new Date("1986-07-09"),
@@ -91,13 +88,11 @@ export const filter: Filter = {
       ],
     },
     {
-      kind: "field",
       field: "country",
       operator: Operator.In, // is
       values: ["IL"], // Israel
     },
     {
-      kind: "field",
       field: "married",
       value: true,
     },

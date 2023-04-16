@@ -1,4 +1,5 @@
-import { createSignal, For, Switch, Match, Accessor } from "solid-js";
+import { createSignal, For, Switch, Match } from "solid-js";
+import { Select } from "./Select";
 import {
   DateValue,
   filter,
@@ -10,68 +11,77 @@ import {
 import type { Filter, Field } from "./filter";
 import "./App.css";
 
-function Option(props: { value: string; selected: string; label: string }) {
-  return (
-    <option value={props.value} selected={props.value == props.selected}>
-      {props.label}
-    </option>
-  );
-}
+const defaultFilter: Filter = {
+  field: "name",
+  operator: Operator.Equals,
+  value: "",
+};
 
-function FilterGroupWidget({
-  filterGroup,
-  onChange,
-}: {
+const filterGroupOperators = { and: "And", or: "Or" };
+
+function FilterGroupWidget(props: {
   filterGroup: FilterGroup;
   onChange?: (f: FilterGroup) => void;
 }) {
-  const operator = filterGroup.kind;
-  const onOperatorChange = (e: { currentTarget: HTMLSelectElement }) => {
-    const value = e.currentTarget.value;
-    if (onChange && (value == "and" || value == "or")) {
-      onChange({ kind: value, filters: filterGroup.filters });
+  const onOperatorChange = (operator: "and" | "or") => {
+    if (props.onChange) {
+      props.onChange({ operator, filters: props.filterGroup.filters });
     }
   };
   const onFilterChange = (index: number, filter: Filter) => {
-    if (onChange) {
-      const filters = [...filterGroup.filters];
+    if (props.onChange) {
+      const filters = [...props.filterGroup.filters];
       filters[index] = filter;
-      onChange({ ...filterGroup, filters });
+      props.onChange({ ...props.filterGroup, filters });
+    }
+  };
+  const removeFilter = (index: number) => {
+    if (props.onChange) {
+      const filters = props.filterGroup.filters.filter(
+        (_, filterIndex) => index != filterIndex
+      );
+      props.onChange({ ...props.filterGroup, filters });
     }
   };
   const addFilter = () => {
-    if (onChange) {
-      const filters = [...filterGroup.filters];
-      filters.push({
-        kind: "field",
-        field: "name",
-        operator: Operator.Equals,
-        value: "",
-      });
-      onChange({ ...filterGroup, filters });
+    if (props.onChange) {
+      const filters = [...props.filterGroup.filters];
+      filters.push(defaultFilter);
+      props.onChange({ ...props.filterGroup, filters });
     }
   };
-  const addFilterGroup = () => {};
+  const addFilterGroup = () => {
+    if (props.onChange) {
+      const filters = [...props.filterGroup.filters];
+      filters.push({
+        operator: "and",
+        filters: [defaultFilter],
+      });
+      props.onChange({ ...props.filterGroup, filters });
+    }
+  };
 
   return (
     <>
       <ul>
-        <For each={filterGroup.filters}>
+        <For each={props.filterGroup.filters}>
           {(filter, i) => (
             <li>
-              <Switch fallback={filterGroup.kind}>
+              <Switch fallback={props.filterGroup.operator}>
                 <Match when={i() == 0}>Where</Match>
                 <Match when={i() == 1}>
-                  <select onChange={onOperatorChange}>
-                    <Option value="and" selected={operator} label="And" />
-                    <Option value="or" selected={operator} label="Or" />
-                  </select>
+                  <Select
+                    options={filterGroupOperators}
+                    selected={props.filterGroup.operator}
+                    onChange={onOperatorChange}
+                  />
                 </Match>
               </Switch>{" "}
               <FilterWidget
                 filter={filter}
                 onChange={(updated) => onFilterChange(i(), updated)}
               />
+              <button onClick={() => removeFilter(i())}>Remove</button>
             </li>
           )}
         </For>
@@ -85,26 +95,6 @@ function FilterGroupWidget({
   );
 }
 
-function OperatorSelector<T extends string>({
-  operators,
-  selected,
-  onChange,
-}: {
-  operators: { [key in T]?: string };
-  selected: T;
-  onChange?: (operator: T) => void;
-}) {
-  return (
-    <select onChange={(e) => onChange && onChange(e.currentTarget.value as T)}>
-      <For each={Object.entries(operators)}>
-        {([operator, label]) => (
-          <Option value={operator} selected={selected} label={label} />
-        )}
-      </For>
-    </select>
-  );
-}
-
 const stringOperators = {
   [Operator.Equals]: "=",
   [Operator.NotEquals]: "≠",
@@ -112,24 +102,24 @@ const stringOperators = {
   [Operator.DoesNotContain]: "doesn't contain",
 };
 
-function StringWidget({
-  value,
-  onChange,
-}: {
+function StringWidget(props: {
   value: StringValue;
-  onChange?: (v: StringValue) => void;
+  onChange?: (value: StringValue) => void;
 }) {
   return (
     <>
-      <OperatorSelector
-        operators={stringOperators}
-        selected={value.operator}
-        onChange={(operator) => onChange && onChange({ ...value, operator })}
+      <Select
+        options={stringOperators}
+        selected={props.value.operator}
+        onChange={(operator) =>
+          props.onChange && props.onChange({ ...props.value, operator })
+        }
       />
       <input
-        value={value.value}
+        value={props.value.value}
         onChange={(e) =>
-          onChange && onChange({ ...value, value: e.currentTarget.value })
+          props.onChange &&
+          props.onChange({ ...props.value, value: e.currentTarget.value })
         }
       />
     </>
@@ -147,18 +137,16 @@ const numberOperators = {
   [Operator.NotBetween]: "not between",
 };
 
-function NumberWidget({
-  value,
-  onChange,
-}: {
+function NumberWidget(props: {
   value: NumberValue;
-  onChange?: (v: NumberValue) => void;
+  onChange?: (value: NumberValue) => void;
 }) {
+  const { value, onChange } = props;
   if ("value" in value) {
     return (
       <>
-        <OperatorSelector
-          operators={numberOperators}
+        <Select
+          options={numberOperators}
           selected={value.operator}
           onChange={(operator) => onChange && onChange({ ...value, operator })}
         />
@@ -180,8 +168,8 @@ function NumberWidget({
     const [from, to] = value.range;
     return (
       <>
-        <OperatorSelector
-          operators={numberOperators}
+        <Select
+          options={numberOperators}
           selected={value.operator}
           onChange={(operator) => onChange && onChange({ ...value, operator })}
         />
@@ -221,45 +209,56 @@ const dateOperators = {
   [Operator.NotBetween]: "not between",
 };
 
-function DateInput({ date }: { date: Date }) {
-  const dateString = date.toISOString().substring(0, 10);
-  return <input type="date" value={dateString} />;
+function DateInput(props: { date: Date }) {
+  const dateString = () => props.date.toISOString().substring(0, 10);
+  return <input type="date" value={dateString()} />;
 }
 
-function DateWidget({ value }: { value: DateValue }) {
-  if ("value" in value) {
+function DateWidget(props: { value: DateValue }) {
+  if (
+    props.value.operator == Operator.Equals ||
+    props.value.operator == Operator.GreaterThan ||
+    props.value.operator == Operator.LessThan ||
+    props.value.operator == Operator.Between ||
+    props.value.operator == Operator.NotBetween
+  ) {
     return (
       <>
-        <OperatorSelector operators={dateOperators} selected={value.operator} />
-        <DateInput date={value.value} />
-      </>
-    );
-  } else {
-    const [from, to] = value.range;
-    return (
-      <>
-        <OperatorSelector operators={dateOperators} selected={value.operator} />
-        <DateInput date={from} /> and <DateInput date={to} />
+        <Select options={dateOperators} selected={props.value.operator} />
+        {"value" in props.value ? (
+          <DateInput date={props.value.value} />
+        ) : (
+          <>
+            <DateInput date={props.value.range[0]} />
+            {" and "}
+            <DateInput date={props.value.range[1]} />
+          </>
+        )}
       </>
     );
   }
 }
 
-function FieldWidget({
-  field,
-  onChange,
-}: {
-  field: Field;
-  onChange?: (f: Field) => void;
-}) {
-  switch (field.field) {
+const fields = {
+  none: "",
+  name: "Name",
+  age: "Age",
+  dob: "Daye of birth",
+  country: "Country",
+  married: "Married?",
+};
+
+function FieldWidget(props: { field: Field; onChange?: (field: Field) => void }) {
+  switch (props.field.field) {
     case "name":
       return (
         <>
-          Name:{" "}
+          <Select options={fields} selected={props.field.field} />
           <StringWidget
-            value={field}
-            onChange={(v) => onChange && onChange({ ...v, field: "name" })}
+            value={props.field}
+            onChange={(value) =>
+              props.onChange && props.onChange({ ...value, field: "name" })
+            }
           />
         </>
       );
@@ -269,8 +268,10 @@ function FieldWidget({
         <>
           Age:{" "}
           <NumberWidget
-            value={field}
-            onChange={(v) => onChange && onChange({ ...v, field: "age" })}
+            value={props.field}
+            onChange={(value) =>
+              props.onChange && props.onChange({ ...value, field: "age" })
+            }
           />
         </>
       );
@@ -278,40 +279,48 @@ function FieldWidget({
     case "dob":
       return (
         <>
-          Date of birth: <DateWidget value={field} />
+          Date of birth: <DateWidget value={props.field} />
         </>
       );
 
     case "country":
-      return <>Country: {JSON.stringify(field.values)}</>;
+      return <>Country: {JSON.stringify(props.field.values)}</>;
 
     case "married":
       return (
         <>
-          Married: <input type="checkbox" checked={field.value} />
+          Married:{" "}
+          <input
+            type="checkbox"
+            checked={props.field.value}
+            onChange={(e) =>
+              props.onChange &&
+              props.onChange({
+                field: "married",
+                value: e.currentTarget.checked,
+              })
+            }
+          />
         </>
       );
   }
 }
 
-function FilterWidget({
-  filter,
-  onChange,
-}: {
+function FilterWidget(props: {
   filter: Filter;
-  onChange?: (f: Filter) => void;
+  onChange?: (filter: Filter) => void;
 }) {
-  switch (filter.kind) {
-    case "and":
-    case "or":
-      return <FilterGroupWidget filterGroup={filter} onChange={onChange} />;
-    case "field":
-      return (
-        <FieldWidget
-          field={filter}
-          onChange={(f) => onChange && onChange({ ...f, kind: "field" })}
-        />
-      );
+  if ("field" in props.filter) {
+    return (
+      <FieldWidget
+        field={props.filter}
+        onChange={(filter) => props.onChange && props.onChange(filter)}
+      />
+    );
+  } else {
+    return (
+      <FilterGroupWidget filterGroup={props.filter} onChange={props.onChange} />
+    );
   }
 }
 
@@ -321,13 +330,7 @@ function App() {
   return (
     <div class="App">
       <h1>Vite + Solid!</h1>
-      <FilterWidget
-        filter={getFilter()}
-        onChange={(updated) => {
-          // console.log("@@@", updated);
-          setFilter(updated);
-        }}
-      />
+      <FilterWidget filter={getFilter()} onChange={setFilter} />
       <pre>{JSON.stringify(getFilter(), null, 2)}</pre>
     </div>
   );
