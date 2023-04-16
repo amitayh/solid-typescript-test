@@ -60,12 +60,9 @@ export type Field =
   | ({ field: "country" } & StringListValue)
   | ({ field: "married" } & BooleanValue);
 
-export type Filters = { filters: Filter[] };
+export type FilterGroup = { kind: "and" | "or"; filters: Filter[] };
 
-export type Filter =
-  | ({ kind: "field" } & Field)
-  | ({ kind: "and" } & Filters)
-  | ({ kind: "or" } & Filters);
+export type Filter = FilterGroup | ({ kind: "field" } & Field);
 
 export const filter: Filter = {
   kind: "and",

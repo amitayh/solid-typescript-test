@@ -2,14 +2,13 @@ import { createSignal, For, Switch, Match, Accessor } from "solid-js";
 import {
   DateValue,
   filter,
+  FilterGroup,
   NumberValue,
   Operator,
   StringValue,
 } from "./filter";
 import type { Filter, Field } from "./filter";
 import "./App.css";
-
-type FilterGroupOperator = "and" | "or";
 
 function Option(props: { value: string; selected: string; label: string }) {
   return (
@@ -19,71 +18,84 @@ function Option(props: { value: string; selected: string; label: string }) {
   );
 }
 
-function FilterGroup({
-  filters,
-  operator,
-  onGroupOperatorChange,
+function FilterGroupWidget({
+  filterGroup,
+  onChange,
 }: {
-  filters: Filter[];
-  operator: FilterGroupOperator;
-  onGroupOperatorChange?: (o: FilterGroupOperator) => void;
+  filterGroup: FilterGroup;
+  onChange?: (f: FilterGroup) => void;
 }) {
-  const onGroupOperatorChangeHandler = (e: {
-    currentTarget: HTMLSelectElement;
-  }) => {
+  const operator = filterGroup.kind;
+  const onOperatorChange = (e: { currentTarget: HTMLSelectElement }) => {
     const value = e.currentTarget.value;
-    if (onGroupOperatorChange && (value == "and" || value == "or")) {
-      onGroupOperatorChange(value);
+    if (onChange && (value == "and" || value == "or")) {
+      onChange({ kind: value, filters: filterGroup.filters });
     }
   };
+  const onFilterChange = (index: number, filter: Filter) => {
+    if (onChange) {
+      const filters = [...filterGroup.filters];
+      filters[index] = filter;
+      onChange({ ...filterGroup, filters });
+    }
+  };
+  const addFilter = () => {
+    if (onChange) {
+      const filters = [...filterGroup.filters];
+      filters.push({
+        kind: "field",
+        field: "name",
+        operator: Operator.Equals,
+        value: "",
+      });
+      onChange({ ...filterGroup, filters });
+    }
+  };
+  const addFilterGroup = () => {};
 
   return (
     <>
       <ul>
-        <For each={filters}>
+        <For each={filterGroup.filters}>
           {(filter, i) => (
             <li>
-              <Switch fallback={operator}>
+              <Switch fallback={filterGroup.kind}>
                 <Match when={i() == 0}>Where</Match>
                 <Match when={i() == 1}>
-                  <select onChange={onGroupOperatorChangeHandler}>
+                  <select onChange={onOperatorChange}>
                     <Option value="and" selected={operator} label="And" />
                     <Option value="or" selected={operator} label="Or" />
                   </select>
                 </Match>
               </Switch>{" "}
-              <FilterWidget filter={filter} />
+              <FilterWidget
+                filter={filter}
+                onChange={(updated) => onFilterChange(i(), updated)}
+              />
             </li>
           )}
         </For>
         <li>
-          <button>Add filter</button> | <button>Add filter group</button>
+          <button onClick={addFilter}>Add filter</button>
+          {" | "}
+          <button onClick={addFilterGroup}>Add filter group</button>
         </li>
       </ul>
     </>
   );
 }
 
-type Operators = { [K in Operator]?: string };
-
-function toOperator(str: string): Operator | undefined {
-  return Object.values(Operator).find((operator) => operator == str);
-}
-
-function OperatorSelector({
+function OperatorSelector<T extends string>({
   operators,
   selected,
   onChange,
 }: {
-  operators: Operators;
-  selected: Operator;
-  onChange?: (operator?: Operator) => void;
+  operators: { [key in T]?: string };
+  selected: T;
+  onChange?: (operator: T) => void;
 }) {
-  // const
   return (
-    <select
-      onChange={(e) => onChange && onChange(toOperator(e.currentTarget.value))}
-    >
+    <select onChange={(e) => onChange && onChange(e.currentTarget.value as T)}>
       <For each={Object.entries(operators)}>
         {([operator, label]) => (
           <Option value={operator} selected={selected} label={label} />
@@ -100,11 +112,26 @@ const stringOperators = {
   [Operator.DoesNotContain]: "doesn't contain",
 };
 
-function StringWidget({ value }: { value: StringValue }) {
+function StringWidget({
+  value,
+  onChange,
+}: {
+  value: StringValue;
+  onChange?: (v: StringValue) => void;
+}) {
   return (
     <>
-      <OperatorSelector operators={stringOperators} selected={value.operator} />
-      <input value={value.value} />
+      <OperatorSelector
+        operators={stringOperators}
+        selected={value.operator}
+        onChange={(operator) => onChange && onChange({ ...value, operator })}
+      />
+      <input
+        value={value.value}
+        onChange={(e) =>
+          onChange && onChange({ ...value, value: e.currentTarget.value })
+        }
+      />
     </>
   );
 }
@@ -120,15 +147,33 @@ const numberOperators = {
   [Operator.NotBetween]: "not between",
 };
 
-function NumberWidget({ value }: { value: NumberValue }) {
+function NumberWidget({
+  value,
+  onChange,
+}: {
+  value: NumberValue;
+  onChange?: (v: NumberValue) => void;
+}) {
   if ("value" in value) {
     return (
       <>
         <OperatorSelector
           operators={numberOperators}
           selected={value.operator}
+          onChange={(operator) => onChange && onChange({ ...value, operator })}
         />
-        <input type="number" value={value.value} />;
+        <input
+          type="number"
+          value={value.value}
+          onChange={(e) =>
+            onChange &&
+            onChange({
+              operator: value.operator,
+              value: parseInt(e.currentTarget.value),
+            })
+          }
+        />
+        ;
       </>
     );
   } else {
@@ -138,10 +183,31 @@ function NumberWidget({ value }: { value: NumberValue }) {
         <OperatorSelector
           operators={numberOperators}
           selected={value.operator}
+          onChange={(operator) => onChange && onChange({ ...value, operator })}
         />
-        <input type="number" value={from} />
+        <input
+          type="number"
+          value={from}
+          onChange={(e) =>
+            onChange &&
+            onChange({
+              operator: value.operator,
+              range: [parseInt(e.currentTarget.value), to],
+            })
+          }
+        />
         and
-        <input type="number" value={to} />
+        <input
+          type="number"
+          value={to}
+          onChange={(e) =>
+            onChange &&
+            onChange({
+              operator: value.operator,
+              range: [from, parseInt(e.currentTarget.value)],
+            })
+          }
+        />
       </>
     );
   }
@@ -179,19 +245,33 @@ function DateWidget({ value }: { value: DateValue }) {
   }
 }
 
-function FieldWidget({ field }: { field: Field }) {
+function FieldWidget({
+  field,
+  onChange,
+}: {
+  field: Field;
+  onChange?: (f: Field) => void;
+}) {
   switch (field.field) {
     case "name":
       return (
         <>
-          Name: <StringWidget value={field} />
+          Name:{" "}
+          <StringWidget
+            value={field}
+            onChange={(v) => onChange && onChange({ ...v, field: "name" })}
+          />
         </>
       );
 
     case "age":
       return (
         <>
-          Age: <NumberWidget value={field} />
+          Age:{" "}
+          <NumberWidget
+            value={field}
+            onChange={(v) => onChange && onChange({ ...v, field: "age" })}
+          />
         </>
       );
 
@@ -215,30 +295,23 @@ function FieldWidget({ field }: { field: Field }) {
 }
 
 function FilterWidget({
-  filter2,
+  filter,
   onChange,
 }: {
-  filter2: Accessor<Filter>;
+  filter: Filter;
   onChange?: (f: Filter) => void;
 }) {
-  const filter = filter2();
   switch (filter.kind) {
     case "and":
     case "or":
-      const onGroupOperatorChangeHandler = (operator: FilterGroupOperator) => {
-        if (onChange) {
-          onChange({ kind: operator, filters: filter.filters });
-        }
-      };
+      return <FilterGroupWidget filterGroup={filter} onChange={onChange} />;
+    case "field":
       return (
-        <FilterGroup
-          filters={filter.filters}
-          operator={filter.kind}
-          onGroupOperatorChange={onGroupOperatorChangeHandler}
+        <FieldWidget
+          field={filter}
+          onChange={(f) => onChange && onChange({ ...f, kind: "field" })}
         />
       );
-    case "field":
-      return <FieldWidget field={filter} />;
   }
 }
 
@@ -249,9 +322,13 @@ function App() {
     <div class="App">
       <h1>Vite + Solid!</h1>
       <FilterWidget
-        filter2={getFilter}
-        onChange={(updated) => setFilter(updated)}
+        filter={getFilter()}
+        onChange={(updated) => {
+          // console.log("@@@", updated);
+          setFilter(updated);
+        }}
       />
+      <pre>{JSON.stringify(getFilter(), null, 2)}</pre>
     </div>
   );
 }
