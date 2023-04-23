@@ -1,21 +1,52 @@
 import { createSignal, For, Switch, Match } from "solid-js";
 import { Select } from "./Select";
 import {
+  RangeValue,
   DateValue,
   filter,
   FilterGroup,
   NumberValue,
   Operator,
   StringValue,
+  SingleComparableValue,
 } from "./filter";
 import type { Filter, Field } from "./filter";
 import "./App.css";
 
-const defaultFilter: Filter = {
-  field: "name",
-  operator: Operator.Equals,
-  value: "",
+const defaultValues: {
+  name: Field;
+  age: Field;
+  dob: Field;
+  country: Field;
+  married: Field;
+} = {
+  name: {
+    field: "name",
+    operator: Operator.Equals,
+    value: "",
+  },
+  age: {
+    field: "age",
+    operator: Operator.Equals,
+    value: 0,
+  },
+  dob: {
+    field: "dob",
+    operator: Operator.Equals,
+    value: new Date(),
+  },
+  country: {
+    field: "country",
+    operator: Operator.In,
+    values: [],
+  },
+  married: {
+    field: "married",
+    value: true,
+  },
 };
+
+const defaultFilter = defaultValues.name;
 
 const filterGroupOperators = { and: "And", or: "Or" };
 
@@ -137,68 +168,113 @@ const numberOperators = {
   [Operator.NotBetween]: "not between",
 };
 
+type NumberOperator =
+  | Operator.Equals
+  | Operator.NotEquals
+  | Operator.GreaterThan
+  | Operator.GreaterThanEquals
+  | Operator.LessThan
+  | Operator.LessThanEquals
+  | Operator.Between
+  | Operator.NotBetween;
+
+function SingleNumberWidget(props: {
+  value: SingleComparableValue<number>;
+  onChange?: (value: SingleComparableValue<number>) => void;
+}) {
+  return (
+    <input
+      type="number"
+      value={props.value.value}
+      onChange={(e) =>
+        props.onChange &&
+        props.onChange({
+          operator: props.value.operator,
+          value: parseInt(e.currentTarget.value),
+        })
+      }
+    />
+  );
+}
+
+function NumberRangeWidget(props: {
+  value: RangeValue<number>;
+  onChange?: (value: RangeValue<number>) => void;
+}) {
+  return (
+    <>
+      <input
+        type="number"
+        value={props.value.range[0]}
+        onChange={(e) =>
+          props.onChange &&
+          props.onChange({
+            operator: props.value.operator,
+            range: [parseInt(e.currentTarget.value), props.value.range[1]],
+          })
+        }
+      />
+      {" and "}
+      <input
+        type="number"
+        value={props.value.range[1]}
+        onChange={(e) =>
+          props.onChange &&
+          props.onChange({
+            operator: props.value.operator,
+            range: [props.value.range[0], parseInt(e.currentTarget.value)],
+          })
+        }
+      />
+    </>
+  );
+}
+
 function NumberWidget(props: {
   value: NumberValue;
   onChange?: (value: NumberValue) => void;
 }) {
-  const { value, onChange } = props;
-  if ("value" in value) {
-    return (
-      <>
-        <Select
-          options={numberOperators}
-          selected={value.operator}
-          onChange={(operator) => onChange && onChange({ ...value, operator })}
-        />
-        <input
-          type="number"
-          value={value.value}
-          onChange={(e) =>
-            onChange &&
-            onChange({
-              operator: value.operator,
-              value: parseInt(e.currentTarget.value),
-            })
-          }
-        />
-        ;
-      </>
-    );
-  } else {
-    const [from, to] = value.range;
-    return (
-      <>
-        <Select
-          options={numberOperators}
-          selected={value.operator}
-          onChange={(operator) => onChange && onChange({ ...value, operator })}
-        />
-        <input
-          type="number"
-          value={from}
-          onChange={(e) =>
-            onChange &&
-            onChange({
-              operator: value.operator,
-              range: [parseInt(e.currentTarget.value), to],
-            })
-          }
-        />
-        and
-        <input
-          type="number"
-          value={to}
-          onChange={(e) =>
-            onChange &&
-            onChange({
-              operator: value.operator,
-              range: [from, parseInt(e.currentTarget.value)],
-            })
-          }
-        />
-      </>
-    );
-  }
+  const onOperatorChange = (value: NumberValue, operator: NumberOperator) => {
+    if (!props.onChange) {
+      return;
+    }
+    if (operator == Operator.Between || operator == Operator.NotBetween) {
+      // operator: range
+      if ("range" in value) {
+        // value: range
+        props.onChange({ ...value, operator });
+      } else {
+        // value: single
+        props.onChange({ operator, range: [0, 0] });
+      }
+    } else {
+      // operator: single
+      if ("range" in value) {
+        // value: range
+        props.onChange({ operator, value: 0 });
+      } else {
+        // value: single
+        value;
+        props.onChange({ ...value, operator });
+      }
+    }
+  };
+
+  return (
+    <>
+      <Select
+        options={numberOperators}
+        selected={props.value.operator}
+        onChange={(operator) => onOperatorChange(props.value, operator)}
+        // onChange={(operator) => onChange && onChange({ ...value, operator })}
+      />
+      {"value" in props.value ? (
+        <SingleNumberWidget value={props.value} onChange={props.onChange} />
+      ) : (
+        <NumberRangeWidget value={props.value} onChange={props.onChange} />
+      )}
+    </>
+  );
 }
 
 const dateOperators = {
@@ -240,7 +316,6 @@ function DateWidget(props: { value: DateValue }) {
 }
 
 const fields = {
-  none: "",
   name: "Name",
   age: "Age",
   dob: "Daye of birth",
@@ -248,48 +323,40 @@ const fields = {
   married: "Married?",
 };
 
-function FieldWidget(props: { field: Field; onChange?: (field: Field) => void }) {
+function FieldValue(props: {
+  field: Field;
+  onChange?: (field: Field) => void;
+}) {
   switch (props.field.field) {
     case "name":
       return (
-        <>
-          <Select options={fields} selected={props.field.field} />
-          <StringWidget
-            value={props.field}
-            onChange={(value) =>
-              props.onChange && props.onChange({ ...value, field: "name" })
-            }
-          />
-        </>
+        <StringWidget
+          value={props.field}
+          onChange={(value) =>
+            props.onChange && props.onChange({ ...value, field: "name" })
+          }
+        />
       );
 
     case "age":
       return (
-        <>
-          Age:{" "}
-          <NumberWidget
-            value={props.field}
-            onChange={(value) =>
-              props.onChange && props.onChange({ ...value, field: "age" })
-            }
-          />
-        </>
+        <NumberWidget
+          value={props.field}
+          onChange={(value) =>
+            props.onChange && props.onChange({ ...value, field: "age" })
+          }
+        />
       );
 
     case "dob":
-      return (
-        <>
-          Date of birth: <DateWidget value={props.field} />
-        </>
-      );
+      return <DateWidget value={props.field} />;
 
     case "country":
-      return <>Country: {JSON.stringify(props.field.values)}</>;
+      return <>{JSON.stringify(props.field.values)}</>;
 
     case "married":
       return (
-        <>
-          Married:{" "}
+        <label>
           <input
             type="checkbox"
             checked={props.field.value}
@@ -300,10 +367,29 @@ function FieldWidget(props: { field: Field; onChange?: (field: Field) => void })
                 value: e.currentTarget.checked,
               })
             }
-          />
-        </>
+          />{" "}
+          True
+        </label>
       );
   }
+}
+
+function FieldWidget(props: {
+  field: Field;
+  onChange?: (field: Field) => void;
+}) {
+  return (
+    <>
+      <Select
+        options={fields}
+        selected={props.field.field}
+        onChange={(field) =>
+          props.onChange && props.onChange(defaultValues[field])
+        }
+      />
+      <FieldValue field={props.field} onChange={props.onChange} />
+    </>
+  );
 }
 
 function FilterWidget(props: {
